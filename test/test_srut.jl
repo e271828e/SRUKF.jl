@@ -1,4 +1,4 @@
-module TestSRUKF
+module TestSRUT
 
 using Test
 using LinearAlgebra
@@ -8,14 +8,12 @@ using StaticArrays
 
 using SRUKF
 
-export test_srukf
+export test_srut
 
-function test_srukf()
-    @testset verbose = true "SRUKF" begin
-        @testset verbose = true "QR Factorization" begin test_qr() end
-        @testset verbose = true "SquareRootUT" begin test_srut() end
-        @testset verbose = true "State Propagator" begin test_state_propagator() end
-        @testset verbose = true "Measurement Processor" begin test_measurement_processor() end
+function test_srut()
+    @testset verbose = true "SRUT" begin
+        @testset verbose = true "QR" begin test_qr() end
+        @testset verbose = true "Transform" begin test_transform() end
     end
 end
 
@@ -53,7 +51,7 @@ function test_qr()
 
 end
 
-function test_srut()
+function test_transform()
 
     #basic correctness test on a linear transformation with equal input, noise
     #and output sizes, check for allocations when using normal Array inputs
@@ -139,123 +137,6 @@ function test_srut()
 
 end
 
-function test_state_propagator()
-
-    N = 5
-    sp = StatePropagator(N, N)
-
-    function g!(z, x, w)
-        @. z = 2*x + 1 + w
-    end
-
-    Random.seed!(1)
-    A = rand(N, N)
-
-    x̄_0 = ones(N)
-    P_δx_0 = A* A'
-    S_δx_0 = cholesky(P_δx_0).L
-    P_δw = Matrix(I, N, N)
-    S_δw = cholesky(P_δw).L
-
-    x̄_1 = copy(x̄_0)
-    S_δx_1 = copy(S_δx_0)
-
-    SRUKF.propagate!(sp, x̄_1, S_δx_1, S_δw, g!)
-    P_δx_1 = S_δx_1 * S_δx_1'
-
-    @test x̄_1 ≈ 2x̄_0 .+ 1
-    @test P_δx_1 ≈ 4*P_δx_0 .+ P_δw
-
-    #check for allocations with built-in Array inputs
-    b = @benchmarkable begin SRUKF.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
-        setup = ($x̄_1 .= $x̄_0; $S_δx_1 .= $S_δx_0) end
-
-    results = run(b)
-    # display(results)
-    @test results.allocs == 0
-
-    #check for allocations with SizedArray inputs
-    x̄_0 = SizedVector{N}(ones(N))
-    P_δx_0 = SizedMatrix{N,N}(A* A')
-    S_δx_0 = cholesky(P_δx_0).L
-    P_δw = SizedMatrix{N,N}(I)
-    S_δw = cholesky(P_δw).L
-
-    x̄_1 = copy(x̄_0)
-    S_δx_1 = copy(S_δx_0)
-
-    b = @benchmarkable begin SRUKF.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
-        setup = ($x̄_1 .= $x̄_0; $S_δx_1 .= $S_δx_0) end
-
-    results = run(b)
-    # display(results)
-    @test results.allocs == 0
-
-end
-
-function test_measurement_processor()
-
-    LY = 2
-    LX = 3
-    LV = 2
-    mp = MeasurementProcessor(LY, LX, LV)
-
-    function h!(y, x, w)
-        y[1] = x[1] + w[1]
-        y[2] = x[2] + w[2]
-    end
-
-    #synthetic measurement
-    x̄_prior = ones(SizedVector{LX})
-    P_δx_prior = SizedMatrix{LX,LX}(1.0I)
-    S_δx_prior = cholesky(P_δx_prior).L
-    P_δv = SizedMatrix{LV,LV}(diagm(LV, LV, [1, 4]))
-    S_δv = cholesky(P_δv).L
-    ỹ = SizedVector{2}([1.1, 1.1])
-
-    x̄_post = copy(x̄_prior)
-    S_δx_post = copy(S_δx_prior)
-
-    SRUKF.update!(mp, x̄_post, S_δx_post, S_δv, ỹ, h!)
-    P_δx_post = S_δx_post * S_δx_post'
-
-    #for the states included in the measurement σ must decrease, for the other
-    #one σ must remain unchanged
-    @test P_δx_post[1,1] < P_δx_prior[1,1]
-    @test P_δx_post[2,2] < P_δx_prior[2,2]
-    @test P_δx_post[3,3] ≈ P_δx_prior[3,3]
-
-    #measurement noise is smaller for the first state than for the second, so
-    #its σ must decrease more and its mean should be pulled more closely towards
-    #to the measurement sample (i.e., its residual should be smaller)
-    @test P_δx_post[1,1] < P_δx_post[2,2]
-    @test abs(ỹ[1] - x̄_post[1]) < abs(ỹ[2] - x̄_post[2])
-
-    #check for allocations with SizedArray inputs
-    b = @benchmarkable begin SRUKF.update!($mp, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
-        setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
-    results = run(b)
-    # display(results)
-    @test results.allocs == 0
-
-    x̄_prior = ones(LX)
-    P_δx_prior = Matrix(I, LX,LX)
-    S_δx_prior = cholesky(P_δx_prior).L
-    P_δv = diagm(LV, LV, [1, 4])
-    S_δv = cholesky(P_δv).L
-    ỹ = [1.1, 1.1]
-
-    x̄_post = copy(x̄_prior)
-    S_δx_post = copy(S_δx_prior)
-
-    #check for allocations with built-in Array inputs
-    b = @benchmarkable begin SRUKF.update!($mp, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
-        setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
-    results = run(b)
-    display(results)
-    @test results.allocs == 0
-
-end
 
 function cholesky_qr_benchmark()
 
