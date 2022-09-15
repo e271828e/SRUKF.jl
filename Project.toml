@@ -1,0 +1,13 @@
+name = "SRUKF"
+uuid = "aef4286d-e9cf-42e9-ad55-01da0a728061"
+authors = ["Miguel Alonso <miguel883@gmail.com> and contributors"]
+version = "0.1.0"
+
+[compat]
+julia = "1.8"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
