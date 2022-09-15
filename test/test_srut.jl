@@ -74,7 +74,7 @@ function test_transform()
     S_δx = cholesky(P_δx).L
     S_δw = cholesky(P_δw).L
 
-    SRUKF.transform!(srut, x̄, S_δx, S_δw, g!)
+    SRUT.transform!(srut, x̄, S_δx, S_δw, g!)
 
     #we know this linear transformation must yield the following:
     @unpack z̄, P_δz, P_δxz = srut
@@ -83,7 +83,7 @@ function test_transform()
     @test P_δxz ≈ 2I
 
     #check for allocations when using regular Array inputs
-    @test @ballocated(SRUKF.transform!($srut, $x̄, $S_δx, $S_δw, $g!)) == 0
+    @test @ballocated(SRUT.transform!($srut, $x̄, $S_δx, $S_δw, $g!)) == 0
 
     #more exhaustive correctness and performance tests on a non-linear function
     #with different sizes, check for allocations using SizedArray inputs
@@ -106,7 +106,7 @@ function test_transform()
     x̄_copy = copy(x̄)
     S_δx_copy = copy(S_δx)
     S_δw_copy = copy(S_δw)
-    SRUKF.transform!(srut, x̄, S_δx, S_δw, f!)
+    SRUT.transform!(srut, x̄, S_δx, S_δw, f!)
 
     #check that x, Sdx, Sdw are unmodified
     @test x̄ == x̄_copy
@@ -130,7 +130,7 @@ function test_transform()
     @test P_δz ≈ w_0c * δ𝔃0 * δ𝔃0' + w_i * δ𝓩i * δ𝓩i'
 
     #check for allocations when using SizedArray inputs
-    b = @benchmarkable SRUKF.transform!($srut, $x̄, $S_δx, $S_δw, $f!)
+    b = @benchmarkable SRUT.transform!($srut, $x̄, $S_δx, $S_δw, $f!)
     results = run(b)
     @test results.allocs == 0
     # display(results)

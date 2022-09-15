@@ -40,7 +40,7 @@ function test_state_propagator()
 
         x̄_1 = copy(x̄_0)
         S_δx_1 = copy(S_δx_0)
-        SRUKF.propagate!(sp, x̄_1, S_δx_1, S_δw, g!)
+        Stages.propagate!(sp, x̄_1, S_δx_1, S_δw, g!)
         P_δx_1 = S_δx_1 * S_δx_1'
 
         #expected results for a Gaussian linear transformation
@@ -53,7 +53,7 @@ function test_state_propagator()
         function (x̄_0, S_δx_0, S_δw, g!)
             x̄_1 = copy(x̄_0)
             S_δx_1 = copy(S_δx_0)
-            b = @benchmarkable begin SRUKF.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
+            b = @benchmarkable begin Stages.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
                 setup = ($x̄_1 .= $x̄_0; $S_δx_1 .= $S_δx_0) end
             results = run(b)
             # display(results)
@@ -123,7 +123,7 @@ function test_measurement_processor()
 
         x̄_post = copy(x̄_prior)
         S_δx_post = copy(S_δx_prior)
-        SRUKF.update!(mp, x̄_post, S_δx_post, S_δv, ỹ, h!)
+        Stages.update!(mp, x̄_post, S_δx_post, S_δv, ỹ, h!)
         P_δx_post = S_δx_post * S_δx_post'
 
         #for the states included in the measurement σ must decrease, for the other
@@ -145,7 +145,7 @@ function test_measurement_processor()
         function (x̄_prior, S_δx_prior, S_δv, ỹ)
             x̄_post = copy(x̄_prior)
             S_δx_post = copy(S_δx_prior)
-            b = @benchmarkable begin SRUKF.update!($mp, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
+            b = @benchmarkable begin Stages.update!($mp, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
                 setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
             results = run(b)
             # display(results)
