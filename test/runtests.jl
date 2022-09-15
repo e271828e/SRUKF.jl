@@ -1,6 +1,3 @@
-using SRUKF
-using Test
+using Revise
 
-@testset "SRUKF.jl" begin
-    # Write your tests here.
-end
+include("test_srukf.jl"); using .TestSRUKF; test_srukf()
