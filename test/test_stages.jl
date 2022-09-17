@@ -104,7 +104,7 @@ function test_measurement_processor()
     LY = 2
     LX = 3
     LV = 2
-    mp = MeasurementProcessor(LY, LX, LV)
+    sc = StateCorrector(LY, LX, LV)
 
     function h!(y, x, w)
         y[1] = x[1] + w[1]
@@ -123,7 +123,7 @@ function test_measurement_processor()
 
         x̄_post = copy(x̄_prior)
         S_δx_post = copy(S_δx_prior)
-        Stages.update!(mp, x̄_post, S_δx_post, S_δv, ỹ, h!)
+        Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!)
         P_δx_post = S_δx_post * S_δx_post'
 
         #for the states included in the measurement σ must decrease, for the other
@@ -140,12 +140,12 @@ function test_measurement_processor()
 
     end
 
-    test_mp_allocs = let mp = mp, h! = h!
+    test_sc_allocs = let sc = sc, h! = h!
 
         function (x̄_prior, S_δx_prior, S_δv, ỹ)
             x̄_post = copy(x̄_prior)
             S_δx_post = copy(S_δx_prior)
-            b = @benchmarkable begin Stages.update!($mp, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
+            b = @benchmarkable begin Stages.update!($sc, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
                 setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
             results = run(b)
             # display(results)
@@ -165,7 +165,7 @@ function test_measurement_processor()
         S_δv = cholesky(P_δv).L
         ỹ = SizedVector{2}([1.1, 1.1])
 
-        test_mp_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
 
         #check for allocations with built-in Array inputs
         x̄_prior = ones(LX)
@@ -176,7 +176,7 @@ function test_measurement_processor()
         S_δv = cholesky(P_δv).L
         ỹ = [1.1, 1.1]
 
-        test_mp_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
 
         #check for allocations with ComponentArray inputs
         x̄_prior = ComponentVector(xa = 1.0, xb = 1.0, xc = 1.0)
@@ -189,7 +189,7 @@ function test_measurement_processor()
         P_δv = ComponentMatrix(diagm(2, 2, [1, 4]), P_δv_axes)
         S_δv = cholesky(P_δv).L
 
-        test_mp_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
 
     end
 

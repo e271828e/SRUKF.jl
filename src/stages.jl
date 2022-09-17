@@ -7,11 +7,18 @@ using LazyArrays
 
 using ..SRUT
 
-export StatePropagator, MeasurementProcessor
+export StatePropagator, StateCorrector
 
 ################################################################################
 ########################### StatePropagator ####################################
 
+"""
+    StatePropagator{LX, LW, S <: SquareRootUT}
+
+Enables propagation of a vector Gaussian distribution \$x\$ of length `LX`
+(state) through an arbitrary function \$x_{k+1} = f(x_{k}, w_k)\$, where \$w\$
+is a vector Gaussian white noise of length `LW` (process noise).
+"""
 struct StatePropagator{LX, LW, S <: SquareRootUT}
     srut::S
 
@@ -22,13 +29,47 @@ struct StatePropagator{LX, LW, S <: SquareRootUT}
 
 end
 
+"""
+    StatePropagator(LX::Integer, LW::Integer)
+    StatePropagator(; LX::Integer, LW::Integer)
+
+Construct a `StatePropagator` instance for a state of length `LX` and process
+noise of length `LW`.
+"""
 StatePropagator(; LX::Integer, LW::Integer) = StatePropagator(LX, LW)
 
 """
-#Use StatePropagator sp to propagate the state x
+    propagate!(sp::StatePropagator,
+               x̄::AbstractVector{<:Real},
+               S_δx::LowerTriangular{<:Real},
+               S_δw::LowerTriangular{<:Real},
+               f!::Function)
 
-#Given the process noise SR-covariance S_δw and the dynamic equation f!(y, x,
-#w), the StatePropagator updates the state mean x̄ and SR-covariance S_δx.
+
+Propagate state `x`, subject to noise `w`, through the process dynamics given by
+function `f!`, using `StatePropagator` `sp`.
+
+# Arguments
+- `sp::StatePropagator`: `StatePropagator{LX, LW}`.
+- `x̄::AbstractVector{<:Real}`: State vector mean, `length(x̄) == LX`.
+- `S_δx::LowerTriangular{<:Real}`: Square root (lower triangular Cholesky
+  factor) of the state vector covariance matrix, `size(S_δx) == (LX, LX)`.
+- `S_δw::LowerTriangular{<:Real}`:: Square root (lower triangular Cholesky
+  factor) of the process noise covariance matrix, `size(S_δw) == (LW, LW)`.
+- `f!::Function`: Process dynamics function. Its signature is `f!(x1, x0, w)`,
+  where `x0` and `x1` are respectively the initial and the transformed state
+  vectors (`x1` is updated in place).
+
+This function mutates `sp`, `x̄` and `S_δx`.
+
+If `P_δx` and `P_δw` are respectively the state and noise covariance matrices,
+`S_δx` and `S_δw` may be initialized as follows:
+```
+using LinearAlgebra
+
+S_δx = cholesky(P_δx).L
+S_δw = cholesky(P_δw).L
+```
 """
 function propagate!(sp::StatePropagator, x̄::AbstractVector{<:Real},
                     S_δx::LowerTriangular{<:Real},
@@ -49,16 +90,24 @@ end
 end
 
 ################################################################################
-######################## MeasurementProcessor ##################################
+######################## StateCorrector ##################################
 
-struct MeasurementProcessor{LY, LX, LV, S <: SquareRootUT}
+"""
+    StateCorrector{LY, LX, LV, S <: SquareRootUT}
+
+Enables correction of a vector Gaussian distribution \$x\$ of length `LX`
+(state) from a vector sample \$\\tilde{y}\$ of length `LY` (measurement),
+related to \$x\$ by an arbitrary function \$\\tilde{y} = h(x,v)\$, where \$w\$
+is a vector Gaussian white noise of length `LV` (measurement noise).
+"""
+struct StateCorrector{LY, LX, LV, S <: SquareRootUT}
     srut::S
     δỹ::SizedVectorF64{LY} #innovation vector
     δx::SizedVectorF64{LX} #correction vector
     K::SizedMatrixF64{LX, LY} #Kalman gain
     U::SizedMatrixF64{LX, LY} #cache for K*S_δy
 
-    function MeasurementProcessor(LY::Integer, LX::Integer, LV::Integer)
+    function StateCorrector(LY::Integer, LX::Integer, LV::Integer)
         srut = SquareRootUT(LX, LV, LY) #input / noise / transformed lengths
         δỹ = zeros(SizedVectorF64{LY})
         δx = zeros(SizedVectorF64{LX})
@@ -69,23 +118,16 @@ struct MeasurementProcessor{LY, LX, LV, S <: SquareRootUT}
 
 end
 
-MeasurementProcessor(; LY::Integer, LX::Integer, LW::Integer) = MeasurementProcessor(LY, LX, LW)
+StateCorrector(; LY::Integer, LX::Integer, LW::Integer) = StateCorrector(LY, LX, LW)
 
-"""
-Use MeasurementProcessor mp to apply a measurement ỹ to state x.
-
-Given the measurement sample ỹ, the measurement noise SR-covariance S_δv and
-the measurement equation h!(y, x, v), the MeasurementProcessor updates the
-prior state mean x̄ and SR-covariance S_δx to their posterior values
-"""
-function update!(mp::MeasurementProcessor,
+function update!(sc::StateCorrector,
                 x̄::AbstractVector{<:Real}, #state mean
                 S_δx::LowerTriangular{<:Real}, #state SR-covariance
                 S_δv::LowerTriangular{<:Real}, #measurement noise SR-covariance
                 ỹ::AbstractVector{<:Real}, #measurement sample
                 h!::Function)  #measurement equation
 
-    @unpack srut, δỹ, δx, K, U = mp
+    @unpack srut, δỹ, δx, K, U = sc
 
     SRUT.transform!(srut, x̄, S_δx, S_δv, h!)
     apply!(x̄, S_δx, δx, δỹ, K, U, ỹ, srut)
