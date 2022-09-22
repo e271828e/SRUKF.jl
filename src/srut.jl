@@ -8,12 +8,13 @@ using LinearAlgebra: BlasFloat, BlasInt
 using LinearAlgebra.BLAS: @blasfunc
 using LinearAlgebra.LAPACK: chklapackerror
 
-export SizedVectorF64, SizedMatrixF64, SizedLowerTriangularF64
+export SizedVectorF64, SizedMatrixF64, SizedLowerTriangularF64, SizedUpperTriangularF64
 export QRFactorization, SquareRootUT
 
 const SizedVectorF64{N} = SizedVector{N, Float64, Vector{Float64}}
 const SizedMatrixF64{M, N} = SizedMatrix{M, N, Float64, 2, Matrix{Float64}}
 const SizedLowerTriangularF64{N} = LowerTriangular{Float64, SizedMatrixF64{N, N}}
+const SizedUpperTriangularF64{N} = UpperTriangular{Float64, SizedMatrixF64{N, N}}
 
 ################################################################################
 ################################# QRFactorization #######################################

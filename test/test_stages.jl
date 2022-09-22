@@ -21,7 +21,7 @@ end
 function test_state_propagator()
 
     N = 5
-    sp = StatePropagator(N, N)
+    sp = Propagator(N, N)
 
     function g!(z, x, w)
         @. z = 2*x + 1 + w
@@ -104,7 +104,7 @@ function test_measurement_processor()
     LY = 2
     LX = 3
     LV = 2
-    sc = StateCorrector(LY, LX, LV)
+    sc = Updater(LY, LX, LV)
 
     function h!(y, x, w)
         y[1] = x[1] + w[1]
@@ -123,7 +123,7 @@ function test_measurement_processor()
 
         x̄_post = copy(x̄_prior)
         S_δx_post = copy(S_δx_prior)
-        Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!)
+        Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr = 3)
         P_δx_post = S_δx_post * S_δx_post'
 
         #for the states included in the measurement σ must decrease, for the other
@@ -140,6 +140,8 @@ function test_measurement_processor()
 
     end
 
+    # return
+
     test_sc_allocs = let sc = sc, h! = h!
 
         function (x̄_prior, S_δx_prior, S_δv, ỹ)
@@ -148,7 +150,7 @@ function test_measurement_processor()
             b = @benchmarkable begin Stages.update!($sc, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
                 setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
             results = run(b)
-            # display(results)
+            display(results)
             @test results.allocs == 0
             end
 

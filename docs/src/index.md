@@ -1,8 +1,8 @@
 
 
 ```@docs
-Stages.StatePropagator
-Stages.StatePropagator(; LX::Integer, LW::Integer)
+Stages.Propagator
+Stages.Propagator(; LX::Integer, LW::Integer)
 Stages.propagate!
-Stages.StateCorrector
+Stages.Updater
 ```
