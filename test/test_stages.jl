@@ -140,8 +140,6 @@ function test_measurement_processor()
 
     end
 
-    # return
-
     test_sc_allocs = let sc = sc, h! = h!
 
         function (x̄_prior, S_δx_prior, S_δv, ỹ)

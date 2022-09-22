@@ -134,41 +134,28 @@ end
 
 Updater(; LY::Integer, LX::Integer, LV::Integer) = Updater(LY, LX, LV)
 
-function update!(su::Updater,
+function update!(su::Updater{LY, LX},
                 x̄::AbstractVector{<:Real}, #state mean
                 S_δx::LowerTriangular{<:Real}, #state SR-covariance
                 S_δv::LowerTriangular{<:Real}, #measurement noise SR-covariance
                 ỹ::AbstractVector{<:Real}, #measurement sample
                 h!::Function; #measurement equation
-                σ_thr::Real = Inf) #normalized innovation acceptance/rejection threshold
+                σ_thr::Real = Inf) where {LY, LX} #normalized innovation acceptance/rejection threshold
 
-    @unpack srut, δỹ, δη, δx, K, M, P_δy, U_δy = su
+    SRUT.transform!(su.srut, x̄, S_δx, S_δv, h!)
+    accepted = update!(x̄, S_δx, ỹ, su, σ_thr)
 
-    SRUT.transform!(srut, x̄, S_δx, S_δv, h!)
-    accepted = update!(x̄, S_δx, δỹ, δη, δx, K, M, P_δy, U_δy, σ_thr, ỹ, srut)
-
-    # compute_update!(; δỹ, K, δx, ỹ, srut)
-    # accepted = check_update!(; δη, P_δy, U_δy, δỹ, σ_thr, srut)
-    # accepted && apply_update!(; x̄, S_δx, M, δx, K, srut)
-
-    # UpdateLog{LY, LX}(accepted ? 1 : 2, ỹ, δỹ, δη, δx)
+    return UpdateLog{LY, LX}(accepted ? 1 : 2, ỹ, su.δỹ, su.δη, su.δx)
 
 end
 
+@noinline function update!( x̄::AbstractVector{<:Real}, #state mean
+                            S_δx::LowerTriangular{<:Real}, #state SR-covariance
+                            ỹ::AbstractVector{<:Real}, #measurement sample
+                            su::Updater,
+                            σ_thr::Real)
 
-@noinline function update!(x̄::AbstractVector{<:Real},
-                           S_δx::LowerTriangular{<:Real},
-                           δỹ::AbstractVector{<:Real},
-                           δη::AbstractVector{<:Real},
-                           δx::AbstractVector{<:Real},
-                           K::AbstractMatrix{<:Real},
-                           M::AbstractMatrix{<:Real},
-                           P_δy::AbstractMatrix{<:Real},
-                           U_δy::UpperTriangular{<:Real},
-                           σ_thr::Real,
-                           ỹ::AbstractVector{<:Real},
-                           srut::SquareRootUT)
-
+    @unpack srut, δỹ, δη, δx, K, M, P_δy, U_δy = su
 
     ########################## compute update ##################################
 
@@ -181,11 +168,7 @@ end
         δỹ[i] = ỹ[i] - ȳ[i]
     end
 
-    #compute the Kalman gain, given by: K = P_δxy / P_δy. the right division
-    #operator expects a factorization as its second argument, so we need to
-    #provide a Cholesky factorization for P_δy. this is straightforward: since
-    #S_δy is already a LowerTriangular, C_δz = Cholesky(S_δz) does the trick,
-    #yielding a Cholesky instance with uplo = 'L'
+    #compute Kalman gain, given by: K = P_δxy / P_δy
     copy!(K, P_δxy)
     C_δy = Cholesky(LowerTriangular(S_δy.data.data))
     rdiv!(K.data, C_δy) #K now holds its final value
@@ -210,10 +193,6 @@ end
             (abs(δη[i]) < σ_thr) || (valid = false)
         end
     end
-
-    # δỹ |> display
-    # δη |> display
-    # valid |> display
 
     ############################### apply update ###############################
 
