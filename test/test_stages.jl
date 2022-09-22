@@ -119,13 +119,26 @@ function test_measurement_processor()
 
         P_δv = SizedMatrix{LV,LV}(diagm(LV, LV, [1, 4]))
         S_δv = cholesky(P_δv).L
-        ỹ = SizedVector{2}([1.1, 1.1])
 
         x̄_post = copy(x̄_prior)
         S_δx_post = copy(S_δx_prior)
-        Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr = 3)
-        P_δx_post = S_δx_post * S_δx_post'
 
+        σ_thr = 3
+
+        #test measurement rejection
+        ỹ = SizedVector{2}([10.0, 1.0])
+        log = Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr)
+        @test log.result == 2 #measurement must have been rejected
+        σ_δy = sqrt.(diag(sc.P_δy))
+        @test sc.δỹ ≈ sc.δη .* σ_δy
+        @test any(sc.δη .> 3)
+
+        #test measurement acceptance
+        ỹ = SizedVector{2}([1.1, 1.1])
+        log = Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr)
+        @test log.result == 1 #measurement must have been processed
+
+        P_δx_post = S_δx_post * S_δx_post'
         #for the states included in the measurement σ must decrease, for the other
         #one σ must remain unchanged
         @test P_δx_post[1,1] < P_δx_prior[1,1]
