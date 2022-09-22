@@ -7,7 +7,7 @@ using LazyArrays
 
 using ..SRUT
 
-export Propagator, Updater
+export Propagator, Updater, UpdateLog
 
 ################################################################################
 ########################### Propagator ####################################
