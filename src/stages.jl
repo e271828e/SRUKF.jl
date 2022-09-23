@@ -179,19 +179,15 @@ end
 
     ############################# check update #################################
 
-    if σ_thr === Inf
-        valid = true
-    else
-        #compute measurement covariance
-        transpose!(U_δy, S_δy)
-        mul!(P_δy, S_δy, U_δy)
+    #compute measurement covariance
+    transpose!(U_δy, S_δy)
+    mul!(P_δy, S_δy, U_δy)
 
-        #compute normalized innovation and check against acceptance threshold
-        valid = true
-        for i in eachindex(δη)
-            δη[i] = δỹ[i] / sqrt(P_δy[i,i])
-            (abs(δη[i]) < σ_thr) || (valid = false)
-        end
+    #compute normalized innovation and check against acceptance threshold
+    valid = true
+    for i in eachindex(δη)
+        δη[i] = δỹ[i] / sqrt(P_δy[i,i])
+        (abs(δη[i]) < σ_thr) || (valid = false)
     end
 
     ############################### apply update ###############################
