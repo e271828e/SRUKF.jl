@@ -42,8 +42,6 @@ function QRFactorization(A::AbstractMatrix{Float64})
     qr!(data, A)
 end
 
-Base.isready(data::QRFactorization) = getfield(data,:valid)[]
-
 Base.propertynames(::QRFactorization) = (:τ, :R)
 
 Base.getproperty(data::QRFactorization, name::Symbol) = getproperty(data, Val(name))
@@ -51,12 +49,10 @@ Base.getproperty(data::QRFactorization, name::Symbol) = getproperty(data, Val(na
 @inline @generated function Base.getproperty(data::QRFactorization{M,N,W},
                                                 ::Val{S}) where {M,N,W,S}
     if S === :R
-        return :(isready(data) || error("Factorization not yet computed");
-                 A = getfield(data, :A);
+        return :(A = getfield(data, :A);
                  UpperTriangular(@view A[1:N, :]))
     elseif S === :τ
-        return :(isready(data) || error("Factorization not yet computed");
-                 getfield(data, :τ))
+        return :(getfield(data, :τ))
     else
         return :(error("QRFactorization has no property $S"))
     end
@@ -195,15 +191,15 @@ Base.getproperty(srut::SquareRootUT, name::Symbol) = getproperty(srut, Val(name)
 
     ex_main = Expr(:block)
 
-    ex_valid = quote
-        if !getfield(srut, :valid)[]
-            error("Transformation not yet performed")
-        end
-    end
+    # ex_valid = quote
+    #     if !getfield(srut, :valid)[]
+    #         error("Transformation not yet performed")
+    #     end
+    # end
 
-    if S ∈ (:z̄, :S_δz, :P_δxz, :P_δz)
-        push!(ex_main.args, ex_valid)
-    end
+    # if S ∈ (:z̄, :S_δz, :P_δxz, :P_δz)
+    #     push!(ex_main.args, ex_valid)
+    # end
 
     if S === :P_δa
         push!(ex_main.args, :(S_δa = srut.S_δa; P_δa = S_δa * S_δa'; return P_δa))

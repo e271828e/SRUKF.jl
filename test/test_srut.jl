@@ -41,10 +41,10 @@ function test_qr()
     @test qr_test.R ≈ qr_B_ref.R
     @test B == B_copy
 
-    #accessing results of a pending factorization should warn
-    qr_new = QRFactorization(11, 5) #just preallocates storage
-    @test_throws ErrorException (qr_new.R)
-    @test_throws ErrorException (qr_new.τ)
+    # #accessing results of a pending factorization should warn
+    # qr_new = QRFactorization(11, 5) #just preallocates storage
+    # @test_throws ErrorException (qr_new.R)
+    # @test_throws ErrorException (qr_new.τ)
 
     b = @benchmarkable qr!($qr_test, $A) setup = ($A .= $A_copy)
     @test run(b).allocs == 0
@@ -62,11 +62,11 @@ function test_transform()
         @. z = 2*x + 1 + w
     end
 
-    #disallow accessing results when computation is pending to prevent mistakes
-    @test_throws ErrorException srut.z̄
-    @test_throws ErrorException srut.S_δz
-    @test_throws ErrorException srut.P_δxz
-    @test_throws ErrorException srut.P_δz
+    # #disallow accessing results when computation is pending to prevent mistakes
+    # @test_throws ErrorException srut.z̄
+    # @test_throws ErrorException srut.S_δz
+    # @test_throws ErrorException srut.P_δxz
+    # @test_throws ErrorException srut.P_δz
 
     x̄ = ones(N)
     P_δx = diagm(N, N, ones(N))
