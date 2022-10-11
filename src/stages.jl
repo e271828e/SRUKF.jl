@@ -7,7 +7,8 @@ using LazyArrays
 
 using ..SRUT
 
-export Propagator, Updater, UpdateLog
+export Propagator, Updater
+export UpdateLog, UpdateFlag, none, accepted, rejected
 
 ################################################################################
 ########################### Propagator ####################################
@@ -92,8 +93,14 @@ end
 ################################################################################
 ################################ Updater ##################################
 
+@enum UpdateFlag begin
+    none = 0
+    accepted = 1
+    rejected = 2
+end
+
 Base.@kwdef struct UpdateLog{LY, LX}
-    result::Int64 = 0 #0 = no op, 1 = accepted, 2 = rejected
+    flag::UpdateFlag = none
     ỹ::SVector{LY,Float64} = zeros(SVector{LY, Float64}) #measurement sample
     δỹ::SVector{LY,Float64} = zeros(SVector{LY, Float64}) #innovation
     δη::SVector{LY,Float64} = zeros(SVector{LY, Float64}) #normalized innovation
@@ -143,9 +150,9 @@ function update!(su::Updater{LY, LX},
                 σ_thr::Real = Inf) where {LY, LX} #normalized innovation acceptance/rejection threshold
 
     SRUT.transform!(su.srut, x̄, S_δx, S_δv, h!)
-    accepted = update!(x̄, S_δx, ỹ, su, σ_thr)
+    flag = update!(x̄, S_δx, ỹ, su, σ_thr)
 
-    return UpdateLog{LY, LX}(accepted ? 1 : 2, ỹ, su.δỹ, su.δη, su.δx)
+    return UpdateLog{LY, LX}(flag, ỹ, su.δỹ, su.δη, su.δx)
 
 end
 
@@ -206,7 +213,7 @@ end
         end
     end
 
-    return valid
+    return valid ? accepted : rejected
 
 end
 

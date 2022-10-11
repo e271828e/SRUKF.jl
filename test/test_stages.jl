@@ -128,7 +128,7 @@ function test_measurement_processor()
         #test measurement rejection
         ỹ = SizedVector{2}([10.0, 1.0])
         log = Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr)
-        @test log.result == 2 #measurement must have been rejected
+        @test log.flag == rejected #measurement must have been rejected
         σ_δy = sqrt.(diag(sc.P_δy))
         @test sc.δỹ ≈ sc.δη .* σ_δy
         @test any(sc.δη .> 3)
@@ -136,7 +136,7 @@ function test_measurement_processor()
         #test measurement acceptance
         ỹ = SizedVector{2}([1.1, 1.1])
         log = Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr)
-        @test log.result == 1 #measurement must have been processed
+        @test log.flag == accepted #measurement must have been processed
 
         P_δx_post = S_δx_post * S_δx_post'
         #for the states included in the measurement σ must decrease, for the other
