@@ -13,12 +13,35 @@ export test_stages
 
 function test_stages()
     @testset verbose = true "Filter Stages" begin
-        @testset verbose = true "State Propagator" begin test_state_propagator() end
-        @testset verbose = true "Measurement Processor" begin test_measurement_processor() end
+        @testset verbose = true "Propagator" begin test_propagator() end
+        @testset verbose = true "Noiseless Propagator" begin test_propagator_noiseless() end
+        @testset verbose = true "Updater" begin test_updater() end
     end
 end
 
-function test_state_propagator()
+function test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
+    x̄_1 = copy(x̄_0)
+    S_δx_1 = copy(S_δx_0)
+    b = @benchmarkable begin Stages.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
+        setup = ($x̄_1 .= $x̄_0; $S_δx_1 .= $S_δx_0) end
+    results = run(b)
+    # display(results)
+    @test results.allocs == 0
+end
+
+
+function test_allocs_sc(sc, x̄_prior, S_δx_prior, S_δv, ỹ, h!)
+    x̄_post = copy(x̄_prior)
+    S_δx_post = copy(S_δx_prior)
+    b = @benchmarkable begin Stages.update!($sc, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
+        setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
+    results = run(b)
+    display(results)
+    @test results.allocs == 0
+end
+
+
+function test_propagator()
 
     N = 5
     sp = Propagator(N, N)
@@ -49,18 +72,6 @@ function test_state_propagator()
 
     end
 
-    test_allocs_sp = let sp = sp, g! = g!
-        function (x̄_0, S_δx_0, S_δw, g!)
-            x̄_1 = copy(x̄_0)
-            S_δx_1 = copy(S_δx_0)
-            b = @benchmarkable begin Stages.propagate!($sp, $x̄_1, $S_δx_1, $S_δw, $g!)
-                setup = ($x̄_1 .= $x̄_0; $S_δx_1 .= $S_δx_0) end
-            results = run(b)
-            # display(results)
-            @test results.allocs == 0
-        end
-    end
-
     @testset verbose = true "Allocations" begin
 
         #with built-in Array inputs
@@ -73,7 +84,7 @@ function test_state_propagator()
         P_δw = Matrix(I, N, N)
         S_δw = cholesky(P_δw).L
 
-        test_allocs_sp(x̄_0, S_δx_0, S_δw, g!)
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
 
         #with SizedArray inputs
         x̄_0 = SizedVector{N}(randn(N))
@@ -82,7 +93,7 @@ function test_state_propagator()
         P_δw = SizedMatrix{N,N}(I)
         S_δw = cholesky(P_δw).L
 
-        test_allocs_sp(x̄_0, S_δx_0, S_δw, g!)
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
 
         #with ComponentArray inputs
         x̄_0 = ComponentVector(xa = 1.0, xb = 1.0, xc = 1.0, xd = 1.0, xe = 1.0)
@@ -93,13 +104,79 @@ function test_state_propagator()
         P_δw = ComponentMatrix(Matrix(1.0I, N, N), P_δw_axes)
         S_δw = cholesky(P_δw).L
 
-        test_allocs_sp(x̄_0, S_δx_0, S_δw, g!)
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
 
     end
 
 end
 
-function test_measurement_processor()
+function test_propagator_noiseless()
+
+    N = 5
+    sp = Propagator(N, 0)
+
+    function g!(z, x, w)
+        @. z = 2*x + 1
+    end
+
+    @testset verbose = true "Correctness" begin
+
+        Random.seed!(1)
+        A = rand(N, N)
+
+        x̄_0 = ones(N)
+        P_δx_0 = A* A'
+        S_δx_0 = cholesky(P_δx_0).L
+        S_δw = LowerTriangular(zeros(SMatrix{0,0,Float64}))
+
+        x̄_1 = copy(x̄_0)
+        S_δx_1 = copy(S_δx_0)
+        Stages.propagate!(sp, x̄_1, S_δx_1, S_δw, g!)
+        P_δx_1 = S_δx_1 * S_δx_1'
+
+        #expected results for a Gaussian linear transformation
+        @test x̄_1 ≈ 2x̄_0 .+ 1
+        @test P_δx_1 ≈ 4*P_δx_0
+
+    end
+
+    return
+
+    @testset verbose = true "Allocations" begin
+
+        #with built-in Array inputs
+        Random.seed!(1)
+        A = rand(N, N)
+
+        x̄_0 = randn(N)
+        P_δx_0 = A* A'
+        S_δx_0 = cholesky(P_δx_0).L
+        S_δw = LowerTriangular(zeros(SMatrix{0,0,Float64}))
+
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
+
+        #with SizedArray inputs
+        x̄_0 = SizedVector{N}(randn(N))
+        P_δx_0 = SizedMatrix{N,N}(A* A')
+        S_δx_0 = cholesky(P_δx_0).L
+        S_δw = LowerTriangular(zeros(SMatrix{0,0,Float64}))
+
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
+
+        #with ComponentArray inputs
+        x̄_0 = ComponentVector(xa = 1.0, xb = 1.0, xc = 1.0, xd = 1.0, xe = 1.0)
+        P_δx_axes = getaxes(x̄_0 * x̄_0')
+        P_δx_0 = ComponentMatrix(A * A', P_δx_axes)
+        S_δx_0 = cholesky(P_δx_0).L
+        S_δw = LowerTriangular(zeros(SMatrix{0,0,Float64}))
+
+        test_allocs_sp(sp, x̄_0, S_δx_0, S_δw, g!)
+
+    end
+
+end
+
+function test_updater()
 
     LY = 2
     LX = 3
@@ -153,20 +230,6 @@ function test_measurement_processor()
 
     end
 
-    test_sc_allocs = let sc = sc, h! = h!
-
-        function (x̄_prior, S_δx_prior, S_δv, ỹ)
-            x̄_post = copy(x̄_prior)
-            S_δx_post = copy(S_δx_prior)
-            b = @benchmarkable begin Stages.update!($sc, $x̄_post, $S_δx_post, $S_δv, $ỹ, $h!)
-                setup = ($x̄_post .= $x̄_prior; $S_δx_post .= $S_δx_prior) end
-            results = run(b)
-            display(results)
-            @test results.allocs == 0
-            end
-
-    end
-
     @testset verbose = true "Allocations" begin
 
         #check for allocations with SizedArray inputs
@@ -178,7 +241,7 @@ function test_measurement_processor()
         S_δv = cholesky(P_δv).L
         ỹ = SizedVector{2}([1.1, 1.1])
 
-        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_allocs_sc(sc, x̄_prior, S_δx_prior, S_δv, ỹ, h!)
 
         #check for allocations with built-in Array inputs
         x̄_prior = ones(LX)
@@ -189,7 +252,7 @@ function test_measurement_processor()
         S_δv = cholesky(P_δv).L
         ỹ = [1.1, 1.1]
 
-        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_allocs_sc(sc, x̄_prior, S_δx_prior, S_δv, ỹ, h!)
 
         #check for allocations with ComponentArray inputs
         x̄_prior = ComponentVector(xa = 1.0, xb = 1.0, xc = 1.0)
@@ -202,7 +265,7 @@ function test_measurement_processor()
         P_δv = ComponentMatrix(diagm(2, 2, [1, 4]), P_δv_axes)
         S_δv = cholesky(P_δv).L
 
-        test_sc_allocs(x̄_prior, S_δx_prior, S_δv, ỹ)
+        test_allocs_sc(sc, x̄_prior, S_δx_prior, S_δv, ỹ, h!)
 
     end
 

@@ -151,7 +151,8 @@ struct SquareRootUT{LX, LW, LZ, LA, LR, LS, QR <: QRFactorization}
     valid::Base.RefValue{Bool} #0: not computed, #1: valid results
 
     function SquareRootUT(LX::Integer, LW::Integer, LZ::Integer, params = UTParams())
-        @assert all((LX, LW, LZ) .> 0)
+        @assert all((LX, LZ) .> 0)
+        @assert LW >= 0
 
         LA = LX + LW #length of augmented input
         LS = 2LA + 1 #number of sigma points
@@ -191,16 +192,6 @@ Base.getproperty(srut::SquareRootUT, name::Symbol) = getproperty(srut, Val(name)
 
     ex_main = Expr(:block)
 
-    # ex_valid = quote
-    #     if !getfield(srut, :valid)[]
-    #         error("Transformation not yet performed")
-    #     end
-    # end
-
-    # if S ∈ (:z̄, :S_δz, :P_δxz, :P_δz)
-    #     push!(ex_main.args, ex_valid)
-    # end
-
     if S === :P_δa
         push!(ex_main.args, :(S_δa = srut.S_δa; P_δa = S_δa * S_δa'; return P_δa))
     elseif S === :P_δz
@@ -212,6 +203,7 @@ Base.getproperty(srut::SquareRootUT, name::Symbol) = getproperty(srut, Val(name)
     return ex_main
 
 end
+
 
 function transform!(srut::SquareRootUT{LX, LW, LZ, LA, LR, LS},
                     x̄::AbstractVector{<:Real},

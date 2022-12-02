@@ -41,15 +41,11 @@ function test_qr()
     @test qr_test.R ≈ qr_B_ref.R
     @test B == B_copy
 
-    # #accessing results of a pending factorization should warn
-    # qr_new = QRFactorization(11, 5) #just preallocates storage
-    # @test_throws ErrorException (qr_new.R)
-    # @test_throws ErrorException (qr_new.τ)
-
     b = @benchmarkable qr!($qr_test, $A) setup = ($A .= $A_copy)
     @test run(b).allocs == 0
 
 end
+
 
 function test_transform()
 
@@ -61,12 +57,6 @@ function test_transform()
     function g!(z, x, w)
         @. z = 2*x + 1 + w
     end
-
-    # #disallow accessing results when computation is pending to prevent mistakes
-    # @test_throws ErrorException srut.z̄
-    # @test_throws ErrorException srut.S_δz
-    # @test_throws ErrorException srut.P_δxz
-    # @test_throws ErrorException srut.P_δz
 
     x̄ = ones(N)
     P_δx = diagm(N, N, ones(N))
@@ -136,6 +126,66 @@ function test_transform()
     # display(results)
 
 end
+
+#test a noiseless unscented transform
+function test_noiseless()
+
+    NX = 5; NW = 0; NZ = 3
+    srut = SquareRootUT(NX, NW, NZ)
+
+    function f!(z, x, w)
+        xr = @view x[1:NZ]
+        @. z = 2*xr*(xr-1) + 1
+    end
+
+    Random.seed!(0)
+    A = randn(NX, NX)
+    x̄ = randn(SizedVector{NX})
+    P_δx = SizedMatrix{NX,NX}(A * A')
+    P_δw = SizedMatrix{NW, NW}(1.0I)
+    S_δx = cholesky(P_δx).L
+
+    #here we need a zero-length LowerTriangular, we cannot use Cholesky
+    S_δw = LowerTriangular(zeros(SMatrix{0,0,Float64}))
+
+    x̄_copy = copy(x̄)
+    S_δx_copy = copy(S_δx)
+    S_δw_copy = copy(S_δw)
+    SRUT.transform!(srut, x̄, S_δx, S_δw, f!)
+
+    #check that x, Sdx, Sdw are unmodified
+    @test x̄ == x̄_copy
+    @test S_δx == S_δx_copy
+    @test S_δw == S_δw_copy
+
+    @unpack ā, z̄, S_δa, S_δz, P_δa, P_δz, weights, 𝓩, δ𝓩 = srut
+    @unpack w_0m, w_0c, w_i = weights
+
+    #cross check the internally stored augmented state mean and covariance
+    @test ā == vcat(x̄, zeros(NW))
+    @test P_δa ≈ vcat(hcat(P_δx, zeros(NX,NW)), hcat(zeros(NW,NX), P_δw))
+
+    #cross-check internally computed z̄ and P_δz against those obtained with
+    #allocating computations from sigma-points
+    𝔃0 = @view 𝓩[:, 1]
+    𝓩i = @view 𝓩[:, 2:end]
+    δ𝔃0 = @view δ𝓩[:, 1]
+    δ𝓩i = @view δ𝓩[:, 2:end]
+    @test z̄ ≈ w_0m * 𝔃0 .+ w_i * dropdims(sum(𝓩i, dims = 2), dims = 2)
+    @test P_δz ≈ w_0c * δ𝔃0 * δ𝔃0' + w_i * δ𝓩i * δ𝓩i'
+
+    #check for allocations when using SizedArray inputs
+    b = @benchmarkable SRUT.transform!($srut, $x̄, $S_δx, $S_δw, $f!)
+    results = run(b)
+    @test results.allocs == 0
+    # display(results)
+
+    return
+
+
+end
+
+
 
 
 function cholesky_qr_benchmark()
