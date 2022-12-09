@@ -191,7 +191,7 @@ function test_updater()
     @testset verbose = true "Correctness" begin
 
         x̄_prior = ones(SizedVector{LX})
-        P_δx_prior = SizedMatrix{LX,LX}(1.0I)
+        P_δx_prior = SizedMatrix{LX,LX}(4.0I)
         S_δx_prior = cholesky(P_δx_prior).L
 
         P_δv = SizedMatrix{LV,LV}(diagm(LV, LV, [1, 4]))
@@ -203,7 +203,7 @@ function test_updater()
         σ_thr = 3
 
         #test measurement rejection
-        ỹ = SizedVector{2}([10.0, 1.0])
+        ỹ = SizedVector{2}([10.0, 2.0])
         log = Stages.update!(sc, x̄_post, S_δx_post, S_δv, ỹ, h!; σ_thr)
         @test log.flag == rejected #measurement must have been rejected
         σ_δy = sqrt.(diag(sc.P_δy))

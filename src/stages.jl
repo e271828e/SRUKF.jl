@@ -105,6 +105,7 @@ Base.@kwdef struct UpdateLog{LY, LX}
     δỹ::SVector{LY,Float64} = zeros(SVector{LY, Float64}) #innovation
     δη::SVector{LY,Float64} = zeros(SVector{LY, Float64}) #normalized innovation
     δx::SVector{LX,Float64} = zeros(SVector{LX, Float64}) #state correction
+    δξ::SVector{LX,Float64} = zeros(SVector{LX, Float64}) #normalized state correction
 end
 
 """
@@ -118,23 +119,29 @@ Gaussian white noise of length `LV` (measurement noise).
 struct Updater{LY, LX, LV, S <: SquareRootUT}
     srut::S
     δỹ::SizedVectorF64{LY} #innovation vector
-    δη::SizedVectorF64{LY} #normalized innovation vector
-    δx::SizedVectorF64{LX} #correction vector
+    δη::SizedVectorF64{LY} #normalized innovation
+    δx::SizedVectorF64{LX} #state correction
+    δξ::SizedVectorF64{LX} #normalized state correction
     K::SizedMatrixF64{LX, LY} #Kalman gain
     M::SizedMatrixF64{LX, LY} #update matrix (K*S_δy)
     P_δy::SizedMatrixF64{LY, LY} #measurement covariance
     U_δy::SizedUpperTriangularF64{LY} #measurement SR-covariance transpose
+    P_δx::SizedMatrixF64{LX, LX} #state covariance
+    U_δx::SizedUpperTriangularF64{LX} #measurement SR-covariance transpose
 
     function Updater(LY::Integer, LX::Integer, LV::Integer)
         srut = SquareRootUT(LX, LV, LY) #input / noise / transformed lengths
         δỹ = zeros(SizedVectorF64{LY})
         δη = zeros(SizedVectorF64{LY})
         δx = zeros(SizedVectorF64{LX})
+        δξ = zeros(SizedVectorF64{LX})
         K = zeros(SizedMatrixF64{LX, LY})
         M = zeros(SizedMatrixF64{LX, LY})
         P_δy = zeros(SizedMatrixF64{LY, LY})
         U_δy = SizedUpperTriangularF64{LY}(zeros(SizedMatrixF64{LY, LY}))
-        new{LY, LX, LV, typeof(srut)}(srut, δỹ, δη, δx, K, M, P_δy, U_δy)
+        P_δx = zeros(SizedMatrixF64{LX, LX})
+        U_δx = SizedUpperTriangularF64{LX}(zeros(SizedMatrixF64{LX, LX}))
+        new{LY, LX, LV, typeof(srut)}(srut, δỹ, δη, δx, δξ, K, M, P_δy, U_δy, P_δx, U_δx)
     end
 
 end
@@ -152,17 +159,17 @@ function update!(su::Updater{LY, LX},
     SRUT.transform!(su.srut, x̄, S_δx, S_δv, h!)
     flag = update!(x̄, S_δx, ỹ, su, σ_thr)
 
-    return UpdateLog{LY, LX}(flag, ỹ, su.δỹ, su.δη, su.δx)
+    return UpdateLog{LY, LX}(flag, ỹ, su.δỹ, su.δη, su.δx, su.δξ)
 
 end
 
 @noinline function update!( x̄::AbstractVector{<:Real}, #state mean
                             S_δx::LowerTriangular{<:Real}, #state SR-covariance
                             ỹ::AbstractVector{<:Real}, #measurement sample
-                            su::Updater,
-                            σ_thr::Real)
+                            su::Updater{LY, LX},
+                            σ_thr::Real) where {LY, LX}
 
-    @unpack srut, δỹ, δη, δx, K, M, P_δy, U_δy = su
+    @unpack srut, δỹ, δη, δx, δξ, K, M, P_δy, U_δy, P_δx, U_δx = su
 
     ########################## compute update ##################################
 
@@ -170,31 +177,44 @@ end
     S_δy = srut.S_δz
     P_δxy = srut.P_δxz
 
-    #compute measurement innovation
+    #measurement innovation
     for i in eachindex(δỹ)
         δỹ[i] = ỹ[i] - ȳ[i]
     end
 
-    #compute Kalman gain, given by: K = P_δxy / P_δy
+    #measurement covariance
+    transpose!(U_δy, S_δy)
+    mul!(P_δy, S_δy, U_δy)
+
+    #normalized innovation (for update check)
+    for i in eachindex(δη)
+        δη[i] = δỹ[i] / sqrt(P_δy[i,i])
+    end
+
+    #Kalman gain, given by: K = P_δxy / P_δy
     copy!(K, P_δxy)
     C_δy = Cholesky(LowerTriangular(S_δy.data.data))
     rdiv!(K.data, C_δy) #K now holds its final value
 
-    #compute correction
+    #state correction
     mul!(δx, K, δỹ)
 
+    #state covariance (non-essential, for update log only)
+    S_δx_LX = LowerTriangular(SizedMatrix{LX, LX, Float64}(S_δx.data))
+    transpose!(U_δx, S_δx_LX)
+    mul!(P_δx, S_δx_LX, U_δx)
+
+    #normalized state correction (non-essential, for update log only)
+    for i in eachindex(δξ)
+        δξ[i] = δx[i] / sqrt(P_δx[i,i])
+    end
 
     ############################# check update #################################
 
-    #compute measurement covariance
-    transpose!(U_δy, S_δy)
-    mul!(P_δy, S_δy, U_δy)
-
-    #compute normalized innovation and check against acceptance threshold
+    #check normalized innovation against acceptance threshold
     valid = true
-    for i in eachindex(δη)
-        δη[i] = δỹ[i] / sqrt(P_δy[i,i])
-        (abs(δη[i]) < σ_thr) || (valid = false)
+    for c in δη
+        (abs(c) < σ_thr) || (valid = false)
     end
 
     ############################### apply update ###############################
