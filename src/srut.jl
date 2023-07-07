@@ -4,7 +4,7 @@ using UnPack
 using StaticArrays
 using LazyArrays
 using LinearAlgebra
-using LinearAlgebra: BlasFloat, BlasInt
+using LinearAlgebra: libblastrampoline, BlasFloat, BlasInt
 using LinearAlgebra.BLAS: @blasfunc
 using LinearAlgebra.LAPACK: chklapackerror
 
@@ -66,7 +66,7 @@ function qr_lwork_query(A::SizedMatrixF64{M,N}, τ::SizedVectorF64{N}) where {M,
     work  = Vector{Float64}(undef, 1)
     info  = Ref{BlasInt}()
     lwork = BlasInt(-1)
-    ccall((@blasfunc(dgeqrf), Base.liblapack_name), Cvoid,
+    ccall((@blasfunc(dgeqrf_), libblastrampoline), Cvoid,
             (Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
             Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt}),
             BlasInt(M), BlasInt(N), A, max(1,stride(A,2)), τ, work, lwork, info)
@@ -83,7 +83,7 @@ function _qr!(data::QRFactorization{M,N,W}) where {M,N,W}
     A, τ, work = map(s -> getfield(data, s), (:A, :τ, :work))
     info  = Ref{BlasInt}()
     lwork = BlasInt(W)
-    ccall((@blasfunc(dgeqrf), Base.liblapack_name), Cvoid,
+    ccall((@blasfunc(dgeqrf_), libblastrampoline), Cvoid,
             (Ref{BlasInt}, Ref{BlasInt}, Ptr{Float64}, Ref{BlasInt},
             Ptr{Float64}, Ptr{Float64}, Ref{BlasInt}, Ptr{BlasInt}),
             BlasInt(M), BlasInt(N), A, max(1,stride(A,2)), τ, work, lwork, info)
